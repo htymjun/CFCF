@@ -16,7 +16,6 @@ contains
 
 
   subroutine allocate_device_mem(myrank, nx, ny, nz, dx, dy, dz, xix, etay, zetaz, Jacobian, ruvwp, T, E, F, G)
-    use mod_globals, only : id_visc
     integer, intent(in)                       :: myrank, nx, ny, nz
     real(8), intent(out), allocatable, device :: dx(:), dy(:), dz(:), xix(:), etay(:), zetaz(:), Jacobian(:,:)
     real(8), intent(out), allocatable, device :: ruvwp(:,:,:,:), T(:,:,:)
