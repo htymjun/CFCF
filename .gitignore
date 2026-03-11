@@ -3,4 +3,8 @@
 *.mod
 *.out
 *.d
-
+*.aux
+*.log
+*.toc
+*.fls
+*.fdb_latexmk
