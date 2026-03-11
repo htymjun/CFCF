@@ -3,7 +3,6 @@ module calc_flux_base
   & blocks, threads, blocksE, blocksF, blocksG, threadsE, threadsF, threadsG
   use calc_physical_quantities
   use calc_keep_kernel
-  use set
   implicit none
   private
   public calc_EFG
@@ -37,7 +36,7 @@ contains
     real(8), intent(out), device :: F(5,nx-2,ny-1,nz-2)
     real(8), intent(out), device :: G(5,nx-2,ny-2,nz-1)
     integer stat, i, j, k
-    call calc_quantities_3D(nx, ny, nz, Jacobian, QJ, ruvwp, T)
+    call calc_quantities(nx, ny, nz, Jacobian, QJ, ruvwp, T)
     call calc_conv_keep(nx, ny, nz, dx, dy, dz, ruvwp, T, E, F, G)
     stat = cudaDeviceSynchronize()
   end subroutine calc_EFG

@@ -17,7 +17,6 @@ vpath %f90 ../../src
 
 OBJ =	mod_globals.o \
       mod_constant.o \
-      cpu_gpu_mpi.o \
       set_coordinate.o \
       calc_physical_quantities.o \
       calc_keep_kernel.o \
@@ -41,7 +40,7 @@ set_bc_common.o: mod_globals.mod
 set.o: mod_globals.mod mod_constant.mod set_bc_common.mod set_coordinate.mod
 calc_physical_quantities.o: mod_globals.mod mod_constant.mod
 calc_keep_kernel.o: mod_globals.mod calc_keep_3d.f90
-calc_flux_base.o: mod_globals.mod calc_physical_quantities.mod set.mod calc_keep_kernel.mod 
+calc_flux_base.o: mod_globals.mod calc_physical_quantities.mod calc_keep_kernel.mod 
 calc_steps.o: mod_globals.mod
 preprocess.o: mod_globals.mod print.mod
 calc_time_dev.o: mod_globals.mod preprocess.mod set.mod calc_flux_base.mod calc_steps.mod print.mod
