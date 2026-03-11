@@ -52,21 +52,5 @@ contains
     integer i, j, k, l
     call set_bc_cyclic(id_accuracy, nx, ny, nz, Q)
   end subroutine set_bc
-
-  subroutine set_bc_mut(nx,ny,nz,mut,qc2)
-    integer, intent(in), value     :: nx, ny, nz
-    real(8), intent(inout), device :: mut(nx,ny,nz), qc2(nx,ny,nz)
-    integer i, j, k
-    call set_bc_mut_common(nx, ny, nz, mut, qc2)
-  end subroutine set_bc_mut
-
-  subroutine calc_forcing(nx, ny, nz, dx, dy, dz, Q, fx, fy, fz)
-    integer, intent(in), value   :: nx, ny, nz
-    real(8), intent(in), device  :: dx(nx-1) ! 1 / dx
-    real(8), intent(in), device  :: dy(ny-1) ! 1 / dy
-    real(8), intent(in), device  :: dz(nz-1) ! 1 / dz
-    real(8), intent(in), device  :: Q(5,nx,ny,nz)
-    real(8), intent(out), device :: fx(nx-2,ny-2,nz-2), fy(nx-2,ny-2,nz-2), fz(nx-2,ny-2,nz-2)
-  end subroutine calc_forcing
 end module set
 
