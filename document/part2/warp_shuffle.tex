@@ -1,0 +1,30 @@
+CUDA Fortranではwarp単位で計算が実行される．1つのwarpは32スレッドからなる．こうした事情からCUDA Fortranではブロックあたりのスレッド数を32の倍数にするのが良いとされている．Warp shuffle命令を使用すると同一warp内の隣のスレッドが担当するメモリにアクセスすることができる．Shared memoryを用いても隣のスレッドが担当するメモリにアクセスできるが，shared memoryへのコピーに時間を要するという問題がある．一方で，warp shuffle命令ではゼロコピーで隣のメモリを見に行くため高速である．しかし，warp shuffleでアクセスできるのはGPU上でも隣にあるメモリだけである．したがって，warp shuffleで差分が計算できるのはx方向に限定される．また，warp shuffle命令ではレジスタを消費する．したがって，レジスタ使用量が少ないRunge-Kuttaの時間発展におけるx方向の差分にwarp shuffle命令を用いて高速化を試みる（Runge-Kuttaの時間発展はボトルネックになっていないため，わざわざwarp shuffleを用いる必要は薄い．比較的簡単な処理でwarp shuffleを説明するためにここで取り上げている）．
+
+まず，warp shuffleを使用するには
+
+\begin{lstlisting}[language=Fortran]
+use cooperative_groups
+\end{lstlisting}
+
+\noindent
+が必要である．cooperative\_groupsには他にも便利な機能が含まれている（詳しくはNvidia公式のユーザーガイドを参照）．Warp shuffle命令を用いて差分計算を行っている箇所を以下に示す．
+
+\begin{lstlisting}[language=Fortran]
+do l = 1, 5
+  E_curr   = E(l,i,j,k)
+  tmp_bits = __shfl_down_sync(z'ffffffff', transfer(E_curr, 0_8), 1)
+  E_next   = transfer(tmp_bits, 0.0_8)
+  if (lane == 31 .or. i == nx-2) then
+    E_next = E(l,i+1,j,k)
+  endif
+  R = dtdydz * (-E_curr     + E_next) &
+  & + dtdzdx * (-F(l,i,j,k) + F(l,i,j+1,k)) &
+  & + dtdxdy * (-G(l,i,j,k) + G(l,i,j,k+1))
+  Q2(l,i+1,j+1,k+1) = Q(l,i+1,j+1,k+1) - coef1 * R
+  Rs(l,i,j,k) = Rs(l,i,j,k) + coef2 * R
+enddo
+\end{lstlisting}
+
+\noindent
+transferを用いて第一引数のビット表現を取得する．倍精度実数型を扱っているため第二引数には0\_8を渡す．transferを使わずにwarp shuffle命令で倍精度実数型を扱うと結果が変わる恐れがある（CUDA Fortranの仕様かも）．
+Warp shuffle命令で隣の値を読みに行くには\_shfl\_down\_syncを使う．1つ後ろのメモリを読みに行くため\_shfl\_donw\_syncを使う．1つ前のメモリを読みに行く場合\_shfl\_up\_syncを使う．第一引数にz'ffffffff'を指定することでwarp内で同期をとることができる．

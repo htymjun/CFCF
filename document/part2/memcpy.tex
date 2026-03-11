@@ -1,0 +1,16 @@
+CUDA CでGPU上に配列を確保するにはcudaMallocを使用する．CUDAは一次元配列の扱いが得意であるため，多次元配列を扱う際でもメモリ上で一次元に平坦化されたメモリを思い浮かべながらプログラムを書くとよい．CUDA CではcudaMallocでGPU上に場所を確保した後にcudaMemcpyでCPUからGPUへのコピーを行う．CUDA CではcudaMallocとcudaMemcpyの両方を明示的に書く必要があるが，CUDA Fortranでは以下のようにdevice属性を付与して配列を宣言すればGPU上に配列が確保される．（内部的にはcudaMallocが走る）
+
+\begin{lstlisting}[language=Fortran]
+real(8), device :: Q_gpu(5,nx,ny,nz)
+\end{lstlisting}
+
+\noindent
+配列を宣言したうえで通常の代入文を書けばcudaMemcpyを実行できる．なお，GPU上での配列の宣言はallocatable属性を付与して動的に行うこともできる．
+
+CUDA Fortranではconstant memoryを活用することが重要である．使い方は簡単で，parameter属性かconstant属性を付けておけばconstant memory上に確保される．Constant memoryは複数のスレッドが同時にアクセスしてもbank conflict(後述)を起こさないという利点をもつ．また，GPUは割り算が非常に遅いため頻繁に使う分数の逆数を事前に計算しておくのも大切な高速化手法であるといえる．
+
+\begin{lstlisting}[language=Fortran]
+real(8), parameter :: one_third = 1.d0 / 3.d0
+real(8), parameter :: two_third = 2.d0 / 3.d0
+real(8), parameter :: one_sixth = 1.d0 / 6.d0
+\end{lstlisting}
