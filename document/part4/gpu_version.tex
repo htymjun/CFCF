@@ -1,0 +1,130 @@
+GPU 版の OUxSBLI\_mini は，CUDA Fortran を用いて GPU 上で計算を実行する．本セクションでは GPU 版独有の実装について解説する．
+
+\subsection{GPU メモリ確保と初期化}
+
+GPU では明示的にメモリを確保する必要がある：
+
+\begin{lstlisting}[language=Fortran]
+real(8), allocatable, device :: Q(:,:,:,:)
+allocate(Q(5,nx,ny,nz))
+call check_gpu_error(cudaMemcpy(...))
+\end{lstlisting}
+
+CPU から GPU への初期データ転送も明示的に行う．
+
+\subsection{GPU カーネルの構造}
+
+CUDA Fortran のカーネルは \texttt{attributes(global)} で修飾される：
+
+\begin{lstlisting}[language=Fortran]
+attributes(global) subroutine calc_keep_x6(nx, ny, nz, Q, T, E)
+  integer, intent(in), value :: nx, ny, nz
+  real(8), intent(in), device :: Q(5,nx,ny,nz), T(nx,ny,nz)
+  real(8), intent(out), device :: E(5,nx-1,ny-2,nz-2)
+
+  integer :: i, j, k
+  i = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+  j = (blockIdx%y - 1) * blockDim%y + threadIdx%y
+  k = (blockIdx%z - 1) * blockDim%z + threadIdx%z
+
+  if (i < nx .and. j < ny .and. k < nz) then
+    ! thread ごとの計算
+  endif
+end subroutine
+\end{lstlisting}
+
+\subsection{Shared Memory の活用}
+
+Shared memory は L1 キャッシュのように機能し，高速アクセスが可能である．OUxSBLI では KEEP flux の計算で shared memory を多用している：
+
+\begin{lstlisting}[language=Fortran]
+attributes(global) subroutine calc_keep_x6(...)
+  real(8), dimension(:), shared :: rho, u, v, w, p, tmp
+  integer :: ii, sx, sy, sz
+
+  ! Global memory から shared memory に読み込み
+  do ii = threadIdx%x - 2, threadsE%x + 3, blockDim%x
+    ! thread が協調してデータを読み込み
+    rho(ii) = Q(1,i+ii-threadIdx%x, j, k)
+  enddo
+
+  call syncthreads()  ! 全 thread の同期を待つ
+
+  ! Shared memory からのアクセスは高速
+  E(1,i,j,k) = KEEP6_x(rho, u, v, w, p, tmp)
+end subroutine
+\end{lstlisting}
+
+Shared memory の利点：
+
+\begin{enumerate}
+  \item \textbf{低遅延}: 主メモリアクセスより $\sim 10$ 倍高速
+  \item \textbf{同期機構}: 複数スレッド間のデータ交換が容易
+  \item \textbf{メモリバンド幅}: L1 キャッシュと同等の高いバンド幅
+\end{enumerate}
+
+制限事項：
+
+\begin{enumerate}
+  \item \textbf{容量制限}: GPU 当たり数十 KB 程度（GPU 世代に依存）
+  \item \textbf{スレッドブロック内のみ}: 異なるブロック間での共有不可
+  \item \textbf{明示的な同期が必要}: syncthreads() での全スレッド待機
+\end{enumerate}
+
+\subsection{MPI による計算と出力の分離}
+
+OUxSBLI\_mini では計算と出力を別々の MPI プロセスで実行する：
+
+\begin{lstlisting}[language=Fortran]
+if (mod(myrank, 2) == 0) then
+  ! ランク 0, 2, 4, ... で計算
+  call RungeKutta(myrank, mygpu, nx, ny, nz, ...)
+else
+  ! ランク 1, 3, 5, ... で出力
+  call send_recv_for_print_odd(myrank, nranks, ...)
+endif
+\end{lstlisting}
+
+利点：
+
+\begin{enumerate}
+  \item \textbf{計算と出力を並列化}: I/O 時間が計算時間に隠蔽される
+  \item \textbf{スケーラビリティ}: 複数 GPU で効率的に計算
+\end{enumerate}
+
+通信オーバーヘッド：
+
+\begin{enumerate}
+  \item MPI\_ISEND/MPI\_IRECV で非同期通信
+  \item 計算の合間に出力リクエストを処理
+\end{enumerate}
+
+\subsection{GPU カーネル呼び出し}
+
+GPU 上のカーネル実行は以下の構文で呼び出される：
+
+\begin{lstlisting}[language=Fortran]
+call calc_keep_x<<<blocksE, threadsE, 1>>>(id_accuracy, nx, ny, nz, Q, T, E, sigma)
+\end{lstlisting}
+
+ここで：
+
+\begin{itemize}
+  \item \texttt{blocksE}: ブロック数（3D）
+  \item \texttt{threadsE}: スレッド数（3D，通常は 32×4×1 など）
+  \item \texttt{1}: Shared memory 使用量（バイト）
+\end{itemize}
+
+GPU では自動的に：
+
+\begin{enumerate}
+  \item スレッド数 $\times$ ブロック数個の並列スレッドを起動
+  \item 各スレッド内の \texttt{threadIdx}, \texttt{blockIdx} を自動設定
+  \item 全スレッド完了まで待機
+\end{enumerate}
+
+\subsection{GPU での精度特性}
+
+GPU 版では 64 ビット（倍精度）浮動小数点演算を使用． CPU 版と同じ精度で実行される．
+
+\end{document}

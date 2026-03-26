@@ -1,0 +1,65 @@
+圧縮性流体力学(Compressible Computational Fluid Dynamics, CFD)は，圧縮性を持つ流体現象をシミュレーションする数値解析手法である．特に高速流や衝撃波を含む流れの解析に用いられる．
+
+\subsection{支配方程式}
+
+圧縮性流体の運動は以下の Euler 方程式で支配される：
+
+\begin{equation}
+\frac{\partial \rho}{\partial t} + \frac{\partial \rho u_i}{\partial x_i} = 0 \quad \text{(連続式)}
+\end{equation}
+
+\begin{equation}
+\frac{\partial \rho u_i}{\partial t} + \frac{\partial \rho u_i u_j}{\partial x_j} + \frac{\partial p}{\partial x_i} = 0 \quad \text{(運動量方程式)}
+\end{equation}
+
+\begin{equation}
+\frac{\partial E}{\partial t} + \frac{\partial (E + p)u_i}{\partial x_i} = 0 \quad \text{(エネルギー方程式)}
+\end{equation}
+
+ここで $\rho$ は密度，$u_i$ は速度成分，$p$ は圧力，$E$ は全エネルギーである．
+
+保存型で記述すると，以下の保存量 $Q = (\rho, \rho u, \rho v, \rho w, E)$ に対して：
+
+\begin{equation}
+\frac{\partial Q}{\partial t} + \frac{\partial E_x}{\partial x} + \frac{\partial E_y}{\partial y} + \frac{\partial E_z}{\partial z} = 0
+\end{equation}
+
+ここで $E_x, E_y, E_z$ は x, y, z 方向の数値流束である．
+
+\subsection{数値流束スキーム}
+
+OUxSBLI で採用されている KEEP (Kinetic Energy and Entropy Preserving) スキームは，以下の特性を持つ：
+
+\begin{itemize}
+  \item \textbf{運動エネルギー保存性}: 人為的な乱流粘性を最小化
+  \item \textbf{エントロピー安定性}: 非物理的な熱発生を抑制
+  \item \textbf{高次精度}: 空間 2 次以上の精度を持つ
+\end{itemize}
+
+KEEP スキームでは，保存量の平均値を用いて流束を計算し以下のように表現される：
+
+\begin{equation}
+F = \frac{1}{2} \{f(Q_L) + f(Q_R)\} - \frac{1}{2} D |u| (Q_R - Q_L)
+\end{equation}
+
+ここで $f$ は物理流束，$D$ は数値粘性項である．
+
+\subsection{時間離散化}
+
+OUxSBLI では 4 段階 Runge-Kutta 法を採用している：
+
+\begin{equation}
+Q^{(k+1)} = Q^{(k)} + \Delta t \cdot L(Q^{(k)})
+\end{equation}
+
+ここで $L$ は時間微分項であり，各段階で異なる係数が用いられる．
+
+\subsection{TAU（Jacobian）正規化}
+
+mesh の歪みを考慮するため，各セルの Jacobian $\tau$ に基づいて保存量を正規化する：
+
+\begin{equation}
+Q_{正規化} = Q / \tau = Q / |J|
+\end{equation}
+
+これにより非直交メッシュやストレッチメッシュでも正確な計算が可能になる．

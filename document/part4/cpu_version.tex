@@ -1,0 +1,157 @@
+OUxSBLI\_cpu は，GPU 版の OUxSBLI\_mini から CPU で実行可能なように変換したものである．本セクションでは，CPU 版の実装と GPU 版の主な違いを解説する．
+
+\subsection{CPU 版の全体構成}
+
+CPU 版は以下のように構成されている：
+
+\begin{itemize}
+  \item \textbf{計算と出力を単一プロセスで実行}: MPI 通信を排除
+  \item \textbf{GPU カーネルを CPU サブルーチンに変換}: 逐次実行の明示的ループ
+  \item \textbf{gfortran でコンパイル}: CUDA Fortran コンパイラ不要
+  \item \textbf{CPU RAM を使用}: GPU device memory に代わり CPU メモリを使用
+\end{itemize}
+
+\subsection{主要ファイルの修正内容}
+
+\subsubsection{mod\_globals.f90}
+
+GPU 版では，GPU スレッド設定が以下のように記述される：
+
+\begin{lstlisting}[language=Fortran]
+type(dim3), parameter :: threadsE = dim3(32,1,1)
+type(dim3) :: blocksE
+\end{lstlisting}
+
+CPU 版では，これらの定義を完全に削除する（図~\ref{fig:mod_globals}参照）．
+
+\subsubsection{calc\_keep\_kernel.f90}
+
+GPU 版の KEEP flux の計算カーネルは属性 \texttt{attributes(global)} を持つ：
+
+\begin{lstlisting}[language=Fortran]
+attributes(global) subroutine calc_keep_x6(id_accuracy, nx, ny, nz, Q, T, E, sigma)
+  integer(kind=8), intent(in), value :: id_accuracy
+  integer, intent(in), value :: nx, ny, nz
+  real(8), intent(in), device :: Q(5,nx,ny,nz), T(nx,ny,nz)
+  real(8), intent(out), device :: E(5,nx-1,ny-2,nz-2)
+  ! GPU thread indexing
+  i = (blockIdx%x-1)*blockDim%x + threadIdx%x
+  j = (blockIdx%y-1)*blockDim%y + threadIdx%y
+  k = (blockIdx%z-1)*blockDim%z + threadIdx%z
+  if (nx-1 < i .or. ny-2 < j .or. nz-2 < k) return
+  ! shared memory loading
+  ...
+end subroutine
+\end{lstlisting}
+
+CPU 版では，以下のように変換される：
+
+\begin{lstlisting}[language=Fortran]
+subroutine calc_keep_x6(id_accuracy, nx, ny, nz, Q, T, E, sigma)
+  integer(kind=8), intent(in) :: id_accuracy
+  integer, intent(in) :: nx, ny, nz
+  real(8), intent(in) :: Q(5,nx,ny,nz), T(nx,ny,nz)
+  real(8), intent(out) :: E(5,nx-1,ny-2,nz-2)
+  ! CPU explicit loops
+  do k = 1, nz-2
+    do j = 1, ny-2
+      do i = 1, nx-1
+        ! direct array access (no shared memory)
+        ...
+      enddo
+    enddo
+  enddo
+end subroutine
+\end{lstlisting}
+
+主な変更点：
+
+\begin{enumerate}
+  \item \textbf{attributes(global) の削除}: CPU サブルーチンとして動作
+  \item \textbf{GPU thread indexing の削除}: 明示的な do ループに置換
+  \item \textbf{Shared memory の削除}: 直接メモリアクセスに置換
+  \item \textbf{Syncthreads() の削除}: CPU では同期不要
+  \item \textbf{Array slicing の修正}: \texttt{k:k+1} → 個別要素アクセス
+\end{enumerate}
+
+\subsubsection{calc\_time\_dev.f90}
+
+GPU 版では MPI と GPU カーネル呼び出しが混在：
+
+\begin{lstlisting}[language=Fortran]
+call MPI_COMM_SIZE(MPI_COMM_WORLD, nranks, ierr)
+call calc_step<<<blocks,threads>>>(nx, ny, nz, ...)
+call cudaDeviceSynchronize()
+call send_recv_for_print_odd(myrank, nranks, ...)
+\end{lstlisting}
+
+CPU 版では簡略化：
+
+\begin{lstlisting}[language=Fortran]
+call calc_step(nx, ny, nz, ...)  ! GPU kernel call -> subroutine call
+call send_recv_for_print_even(0, 1, ...)  ! rank 0, nranks=1
+\end{lstlisting}
+
+\subsubsection{print.f90}
+
+GPU 版では MPI 通信でランク間のデータ交換：
+
+\begin{lstlisting}[language=Fortran]
+subroutine send_recv_for_print_even3(myrank, nranks, step, ...)
+  call MPI_ISEND(Q, size(Q), MPI_REAL8, myrank+1, ...)
+  call MPI_WAITALL(...)
+end subroutine
+\end{lstlisting}
+
+CPU 版では単一プロセスで直接出力：
+
+\begin{lstlisting}[language=Fortran]
+subroutine send_recv_for_print_even3(myrank, nranks, step, ...)
+  call print_vtk(step, nx, ny, nz, ...)
+end subroutine
+\end{lstlisting}
+
+\subsection{メモリ管理の違い}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{項目} & \textbf{GPU 版} & \textbf{CPU 版} \\
+\hline
+配列宣言 & \texttt{real(8), allocatable, device :: Q(:,:,:,:)} & \texttt{real(8), allocatable :: Q(:,:,:,:)} \\
+メモリ確保 & \texttt{allocate(Q, device)} & \texttt{allocate(Q)} \\
+データ転送 & 明示的な GPUへのコピー & 不要（同じメモリ領域） \\
+メモリ容量 & GPU VRAM (実行可能なサイズ制限) & CPU RAM (一般的にGPUより大きい) \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{パフォーマンス特性}
+
+CPU 版の計算時間は GPU 版と比較して 100〜1000 倍遅い（表~\ref{tab:perf}）：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+ & GPU版 & CPU版 & 倍率 \\
+\hline
+デバイス & NVIDIA RTX 4060 & Intel CPU (4 cores) & - \\
+メッシュサイズ & 66$^3$ & 66$^3$ & - \\
+実行時間 & 約2分 & 数時間 & 100-1000倍 \\
+\hline
+\end{tabular}
+\end{table}
+
+GPU版が高速なのは：
+
+\begin{enumerate}
+  \item GPU には 3000+ 個の CUDA cores が存在
+  \item CPU は数個のコアで逐次実行
+  \item メモリ帯域幅: GPU $>$ CPU
+\end{enumerate}
+
+\subsection{数値精度}
+
+CPU 版と GPU 版の計算結果は浮動小数点精度の範囲内で一致する（相対誤差 $< 10^{-10}$）．同一のパラメータで実行した場合，初期条件は完全に一致し，時間発展での差異は丸め誤差のみである．
