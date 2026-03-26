@@ -1,5 +1,4 @@
 program main
-  use, intrinsic :: iso_fortran_env
   use mod_globals, only : id_recal, nx, ny, nz, Lx, Ly, Lz
   use set
   use set_coordinate
@@ -13,7 +12,7 @@ program main
   logical is_sequential
 
   allocate(Q(5,nx,ny,nz), x(nx), dx(nx-1), y(ny), dy(ny-1), z(nz), dz(nz-1), Jacobian(nx,ny))
-  call set_grid(0, nx, ny, nz, Lx, Ly, Lz, x, y, z, dx, dy, dz)
+  call set_grid(nx, ny, nz, Lx, Ly, Lz, x, y, z, dx, dy, dz)
   call set_Jacobian_xy(nx, ny, nz, dx, dy, dz, Jacobian)
 
   if (kind(id_recal) == 4) then
@@ -40,7 +39,7 @@ program main
     close(10)
   elseif (kind(id_recal) == 2) then
     write(*,*) "set initial condition"
-    call set_init(0, nx, ny, nz, x, y, z, Q)
+    call set_init(nx, ny, nz, x, y, z, Q)
   else
     write(*,*) "wrong paramater was found"
   endif
@@ -76,4 +75,3 @@ program main
 
   deallocate(Q, x, dx, y, dy, z, dz, Jacobian)
 end program main
-

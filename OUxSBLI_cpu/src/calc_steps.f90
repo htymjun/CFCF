@@ -16,8 +16,7 @@ contains
     real(8), intent(out), dimension(5,nx,ny,nz)         :: Q2
     real(8), intent(inout), dimension(5,nx-2,ny-2,nz-2) :: Rs
     real(8) R, dtdydz, dtdzdx, dtdxdy, dx_next, E_curr, E_next
-    integer i, j, k, l, lane
-    integer(8) tmp_bits
+    integer i, j, k, l
     do k=1,nz-2
       do j=1,ny-2
         do i=1,nx-2
@@ -51,8 +50,7 @@ contains
     real(8), intent(inout), dimension(5,nx-2,ny-2,nz-2) :: Rs
     real(8), intent(inout), dimension(5,nx,ny,nz)       :: Q
     real(8) R, dtdydz, dtdzdx, dtdxdy, dx_next, E_curr, E_next
-    integer i, j, k, l, lane
-    integer(8) tmp_bits
+    integer i, j, k, l
     do k=1,nz-2
       do j=1,ny-2
         do i=1,nx-2
