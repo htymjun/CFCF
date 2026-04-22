@@ -1,7 +1,6 @@
-# CUDA_Fortran_tutorials
-## OUxSBLI
+# CUDA Fortran for Compressible Flow (CFCF)
 
-### 依存
+## 依存
 HPC SDK >= 24
 nvhpc-openmpi3をロードする
 
